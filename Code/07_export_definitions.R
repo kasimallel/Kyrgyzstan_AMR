@@ -1,0 +1,13 @@
+source(file.path(Sys.getenv("KGZ_PKG"), "R", "config.R"))
+suppressPackageStartupMessages(library(writexl))
+res <- readRDS(file.path(OUT, "02_resistance.rds"))
+lab <- setNames(res$drug$drug, res$drug$code)
+mag <- bind_rows(lapply(names(res$mag), function(t) bind_rows(lapply(names(res$mag[[t]]), function(cat) tibble(table = t, category = cat, agents = paste(lab[res$mag[[t]][[cat]]], collapse = ", "))))))
+tpl <- bind_rows(lapply(names(res$tpl), function(r) bind_rows(lapply(names(res$tpl[[r]]), function(cl) tibble(row = r, class = cl, agents = paste(res$tpl[[r]][[cl]], collapse = ", "))))))
+drug <- res$drug %>% select(code, drug, aware)
+# result-code dictionary actually observed
+p1 <- readRDS(file.path(OUT, "01_pathogens_ast.rds")); codes <- as.data.frame(table(p1$ast_long$result_raw, useNA = "ifany")) %>% setNames(c("raw_code", "n"))
+codes$harmonised <- ifelse(codes$raw_code %in% c("Susceptible","S","S*") | grepl("^S[^a-z]?$", codes$raw_code) | grepl("^S.$", codes$raw_code), "S", ifelse(codes$raw_code %in% c("Intermediate","I*","I (non-PNA)"), "R (non-susceptible; counted as resistant)", ifelse(codes$raw_code %in% c("Resistant","R","HLR+"), "R", "not interpretable / inferred (MRSA)")))
+gen <- tibble(code = names(res$gen_cat), class = unname(res$gen_cat)) %>% mutate(agent = lab[code]) %>% group_by(class) %>% summarise(agents = paste(agent, collapse = ", "), .groups = "drop")
+write_xlsx(list(generic_classes = gen, magiorakos = mag, template_cells = tpl, drugs = drug, ast_codes = codes), file.path(OUT, "08_definitions.xlsx"))
+print(codes)
